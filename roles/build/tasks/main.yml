@@ -6,14 +6,16 @@
 
 - name: Get application source code
   git:
-    repo: https://github.com/fiftin/ansible-semaphore-test-app.git
+    repo: https://github.com/semaphoreui/semaphore-demo-app.git
     dest: /tmp/demo-app-src
     force: yes
 
 
-- name: Build artifact and upload it to storage
-  ansible.builtin.pause:
-    seconds: 5
+- name: Builds an artifact and stores it in storage
+  ansible.builtin.archive:
+    path: /tmp/demo-app-src
+    dest: /tmp/demo-app-{{ semaphore_vars.task_details.target_version }}.tar.gz
+    format: gz
 
 
 - name: Print final version

@@ -1,7 +1,8 @@
 
 - name: Install artifact and create configuration files
-  ansible.builtin.pause:
-    seconds: 5
+  ansible.builtin.unarchive:
+    src: /tmp/demo-app-{{ semaphore_vars.task_details.target_version }}.tar.gz
+    dest: /tmp/demo-app-{{ semaphore_vars.task_details.target_version }}
 
 
 - name: Print installed version
