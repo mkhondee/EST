@@ -13,7 +13,7 @@
     content: ""
     force: yes
 
-- name: Add 100 lines to dummy file
+- name: Add {{ dummy_lines }} lines to dummy file
   lineinfile:
     path: "{{ dummy_file_path }}"
     line: "This is line {{ item }}"
