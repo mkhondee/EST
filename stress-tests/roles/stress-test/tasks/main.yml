@@ -1,76 +1,65 @@
----
-- name: Playbook with huge output
-  hosts: localhost
-  gather_facts: yes
+- name: Print host info
+  debug:
+    msg: "Running on {{ inventory_hostname }}"
 
-  vars:
-    dummy_file_path: /tmp/ansible_dummy_file.txt
-    dummy_lines: 100
+- name: Generate large output using debug
+  debug:
+    msg: "{{ item }}"
+  loop: "{{ range(1, 51)|list }}"
 
-  tasks:
+- name: Create dummy file
+  copy:
+    dest: "{{ dummy_file_path }}"
+    content: ""
+    force: yes
 
-    - name: Print host info
-      debug:
-        msg: "Running on {{ inventory_hostname }}"
+- name: Add 100 lines to dummy file
+  lineinfile:
+    path: "{{ dummy_file_path }}"
+    line: "This is line {{ item }}"
+    create: yes
+  loop: "{{ range(1, dummy_lines + 1)|list }}"
 
-    - name: Generate large output using debug
-      debug:
-        msg: "{{ item }}"
-      loop: "{{ range(1, 51)|list }}"
+- name: Stat dummy file
+  stat:
+    path: "{{ dummy_file_path }}"
+  register: dummy_stat
 
-    - name: Create dummy file
-      copy:
-        dest: "{{ dummy_file_path }}"
-        content: ""
-        force: yes
+- name: Show file size and checksum
+  debug:
+    var: dummy_stat.stat
 
-    - name: Add 100 lines to dummy file
-      lineinfile:
-        path: "{{ dummy_file_path }}"
-        line: "This is line {{ item }}"
-        create: yes
-      loop: "{{ range(1, dummy_lines + 1)|list }}"
+- name: Repeat shell commands
+  shell: 'echo "Loop index: {{ item }}"; date'
+  register: loop_shell
+  loop: "{{ range(1, 30)|list }}"
 
-    - name: Stat dummy file
-      stat:
-        path: "{{ dummy_file_path }}"
-      register: dummy_stat
+- name: Show each shell command output
+  debug:
+    msg: "{{ item.stdout }}"
+  loop: "{{ loop_shell.results }}"
 
-    - name: Show file size and checksum
-      debug:
-        var: dummy_stat.stat
+- name: Create many empty files
+  file:
+    path: "/tmp/dummy_file_{{ item }}.txt"
+    state: touch
+  loop: "{{ range(1, 50)|list }}"
 
-    - name: Repeat shell commands
-      shell: 'echo "Loop index: {{ item }}"; date'
-      register: loop_shell
-      loop: "{{ range(1, 30)|list }}"
+- name: List all /tmp files
+  shell: ls -lh /tmp | grep dummy_file
+  register: tmp_files
 
-    - name: Show each shell command output
-      debug:
-        msg: "{{ item.stdout }}"
-      loop: "{{ loop_shell.results }}"
+- name: Print file list
+  debug:
+    msg: "{{ tmp_files.stdout_lines }}"
 
-    - name: Create many empty files
-      file:
-        path: "/tmp/dummy_file_{{ item }}.txt"
-        state: touch
-      loop: "{{ range(1, 50)|list }}"
+- name: Gather detailed facts
+  setup:
 
-    - name: List all /tmp files
-      shell: ls -lh /tmp | grep dummy_file
-      register: tmp_files
+- name: Print OS info
+  debug:
+    var: ansible_distribution
 
-    - name: Print file list
-      debug:
-        msg: "{{ tmp_files.stdout_lines }}"
-
-    - name: Gather detailed facts
-      setup:
-
-    - name: Print OS info
-      debug:
-        var: ansible_distribution
-
-    - name: Print CPU count
-      debug:
-        var: ansible_processor_cores
+- name: Print CPU count
+  debug:
+    var: ansible_processor_cores
