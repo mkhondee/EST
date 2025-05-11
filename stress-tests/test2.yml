@@ -1,13 +1,21 @@
-- name: Generate fast, huge output with debug
+---
+- name: Generate fast, large debug output with long random lines
   hosts: localhost
   gather_facts: no
-
   vars:
-    total_messages: 5000
+    total_messages: 1000
+    line_length: 3000
 
   tasks:
 
-    - name: Print fast debug messages in loop
+    - name: Generate random lines
+      vars:
+        chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
       debug:
-        msg: "Line number {{ item }}"
-      loop: "{{ range(1, total_messages + 1) | list }}"
+        msg: "{{ item }}"
+      loop: >
+        {{
+          range(1, total_messages + 1) | map('int') |
+          map('regex_replace', '.*', chars | community.general.random_choice(length=line_length)) |
+          list
+        }}
