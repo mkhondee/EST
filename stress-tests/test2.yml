@@ -12,5 +12,5 @@
 
     - name: Print fast debug messages in loop
       ansible.builtin.debug:
-        var: lookup('community.general.random_pet', words=3000)
+        var: lookup('community.general.random_pet', words=20000)
       loop: "{{ range(1, total_messages + 1) | list }}"
