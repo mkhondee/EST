@@ -1,21 +1,16 @@
----
-- name: Generate fast, large debug output with long random lines
+- name: Generate fast, huge output with debug
   hosts: localhost
   gather_facts: no
+
   vars:
-    total_messages: 1000
-    line_length: 3000
+    total_messages: 5000
 
   tasks:
+    - name: Install required package
+      ansible.builtin.pip:
+        name: petname
 
-    - name: Generate random lines
-      vars:
-        chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-      debug:
-        msg: "{{ item }}"
-      loop: >
-        {{
-          range(1, total_messages + 1) | map('int') |
-          map('regex_replace', '.*', chars | community.general.random_choice(length=line_length)) |
-          list
-        }}
+    - name: Print fast debug messages in loop
+      ansible.builtin.debug:
+        var: lookup('community.general.random_pet', words=300)
+      loop: "{{ range(1, total_messages + 1) | list }}"
