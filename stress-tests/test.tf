@@ -14,13 +14,13 @@ terraform {
 provider "null" {}
 provider "local" {}
 
-variable "count" {
+variable "resource_count" {
   description = "How many dummy resources to create"
   default     = 100
 }
 
 resource "null_resource" "stress" {
-  count = var.count
+  count = var.resource_count
 
   triggers = {
     always_run = timestamp()
@@ -32,7 +32,7 @@ resource "null_resource" "stress" {
 }
 
 resource "local_file" "dummy_files" {
-  count    = var.count
+  count    = var.resource_count
   content  = "This is test file #${count.index}"
   filename = "${path.module}/output/file_${count.index}.txt"
 }
