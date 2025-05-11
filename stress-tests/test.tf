@@ -16,7 +16,7 @@ provider "local" {}
 
 variable "resource_count" {
   description = "How many dummy resources to create"
-  default     = 100
+  default     = 500
 }
 
 resource "null_resource" "stress" {
