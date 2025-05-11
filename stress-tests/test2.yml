@@ -3,7 +3,7 @@
   gather_facts: no
 
   vars:
-    total_messages: 5000
+    total_messages: 1000
 
   tasks:
     - name: Install required package
@@ -12,5 +12,5 @@
 
     - name: Print fast debug messages in loop
       ansible.builtin.debug:
-        var: lookup('community.general.random_pet', words=300)
+        var: lookup('community.general.random_pet', words=3000)
       loop: "{{ range(1, total_messages + 1) | list }}"
