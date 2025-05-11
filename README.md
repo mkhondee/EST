@@ -24,14 +24,15 @@ The repository includes examples for the following technologies:
   - Displays CPU information
   - Shows memory usage
   - Reports disk space
-- `print_system_info.ps1` - PowerShell script for Windows system information
-  - Displays CPU usage percentage
-  - Shows detailed memory statistics
-  - Reports disk space with formatted tables
-  - Color-coded output for better readability
 
-### Python
-- `stress-tests/` - Directory containing Python-based stress testing scripts
+### Stress Tests
+Located in the `stress-tests/` directory, these files are designed to test system performance and resource utilization:
+- `test.tf` - Terraform-based stress test
+  - Creates multiple null resources (default: 100)
+  - Generates dummy files to test file system performance
+  - Uses local-exec provisioner to simulate workload
+  - Configurable resource count through variables
+- `test.yml` - Ansible-based stress test playbook
 
 ## Prerequisites
 
@@ -79,6 +80,19 @@ chmod +x print_system_info.sh
 ```powershell
 # Run the script
 .\print_system_info.ps1
+```
+
+### Stress Tests
+```bash
+# Navigate to stress tests directory
+cd stress-tests
+
+# Run Terraform stress test
+terraform init
+terraform apply
+
+# Run Ansible stress test
+ansible-playbook test.yml
 ```
 
 ## Contributing
