@@ -1,158 +1,89 @@
-- name: Install ESXi hypervisor via ESXi Auto-Installer
-  hosts: all
-  gather_facts: false
-  vars:
-    delegate: localhost
+- name: Gather vmware host facts
+  community.vmware.vmware_host_facts:
+    hostname: "{{ esxi_server }}"
+    username: "{{ esxi_username }}"
+    password: "{{ esxi_password }}"
+  register: host_facts
+  delegate_to: localhost
 
-  tasks:
-    # Enter -e reinstall=true to overwrite default behaviour.
-    # If reinstall is set to true, playbook will reinstall over existing servers.
-    # Otherwise, default behaviour is to skip installation if a server is pingable.
-    - name: Convert reinstall parameter into boolean(true)
-      ansible.builtin.set_fact:
-        blnreinstall: true
-      when: (reinstall | default('') | lower) == "true" or (reinstall | default(false))
+- name: Gather vmware host facts from vCenter
+  community.vmware.vmware_host_facts:
+    hostname: "{{ vcenter_hostname }}"
+    username: "{{ vcenter_username }}"
+    password: "{{ vcenter_password }}"
+    esxi_hostname: "{{ esxi_hostname }}"
+  register: host_facts
+  delegate_to: localhost
 
-    - name: Convert reinstall parameters into boolean(false)
-      ansible.builtin.set_fact:
-        blnreinstall: false
-      when: blnreinstall is not defined
+- name: Gather vmware host facts from vCenter with tag information
+  community.vmware.vmware_host_facts:
+    hostname: "{{ vcenter_hostname }}"
+    username: "{{ vcenter_username }}"
+    password: "{{ vcenter_password }}"
+    esxi_hostname: "{{ esxi_hostname }}"
+    show_tag: true
+  register: host_facts_tag
+  delegate_to: localhost
 
-    # Verify if all required variables are present:
-    - name: Auto Installer iso_image is set.
-      ansible.builtin.assert:
-        fail_msg: "iso_image is undefined."
-        that: iso_image is defined
-      run_once: true
-    - name: Auto Installer address is set
-      ansible.builtin.assert:
-        fail_msg: "auto_installer_address is undefined"
-        that: auto_installer_address is defined
-      run_once: true
-    - name: Management Network netmask is set.
-      ansible.builtin.assert:
-        fail_msg: "management_network.netmask is not defined. Set this to the netmask of the ESXi Mgmt Interface."
-        that: management_network.netmask is defined
-      run_once: true
-    - name: Management Network gateway is set.
-      ansible.builtin.assert:
-        fail_msg: "management_network.gateway is not defined. Set this to the gateway address of the ESXi Mgmt Interface."
-        that: management_network.gateway is defined
-      run_once: true
+- name: Get VSAN Cluster UUID from host facts
+  community.vmware.vmware_host_facts:
+    hostname: "{{ esxi_server }}"
+    username: "{{ esxi_username }}"
+    password: "{{ esxi_password }}"
+  register: host_facts
+- set_fact:
+    cluster_uuid: "{{ host_facts['ansible_facts']['vsan_cluster_uuid'] }}"
 
-    - name: MAC or OOBM Address is set
-      ansible.builtin.assert:
-        fail_msg: "The MAC address on OOBM IP for this host is not defined."
-        that: macaddr is defined or oobm_ip is defined
+- name: Gather some info from a host using the vSphere API output schema
+  community.vmware.vmware_host_facts:
+    hostname: "{{ vcenter_hostname }}"
+    username: "{{ vcenter_username }}"
+    password: "{{ vcenter_password }}"
+    esxi_hostname: "{{ esxi_hostname }}"
+    schema: vsphere
+    properties:
+      - hardware.memorySize
+      - hardware.cpuInfo.numCpuCores
+      - config.product.apiVersion
+      - overallStatus
+  register: host_facts
 
-    # Check if host is already online.
-    # We run 2 pings because the first ping often fails.
-    - name: Initial ping...
-      delegate_to: "{{ delegate }}"
-      ansible.builtin.shell: ping -c 1 -w 2 "{{ inventory_hostname }}"
-      ignore_errors: true
-      changed_when: false
-      check_mode: false
+- name: Gather information about powerstate and connection state
+  community.vmware.vmware_host_facts:
+    hostname: "{{ vcenter_hostname }}"
+    username: "{{ vcenter_username }}"
+    password: "{{ vcenter_password }}"
+    esxi_hostname: "{{ esxi_hostname }}"
+    schema: vsphere
+    properties:
+      - runtime.connectionState
+      - runtime.powerState
 
-    - name: Check if host is pingable
-      delegate_to: "{{ delegate }}"
-      ansible.builtin.shell: ping -c 1 -w 2 "{{ inventory_hostname }}"
-      ignore_errors: true
-      register: results
-      changed_when: false
-      check_mode: false
+- name: How to retrieve Product, Version, Build, Update info for ESXi from vCenter
+  block:
+    - name: Gather product version info for ESXi from vCenter
+      community.vmware.vmware_host_facts:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        esxi_hostname: "{{ esxi_hostname }}"
+        schema: vsphere
+        properties:
+          - config.product
+          - config.option
+      register: gather_host_facts_result
 
-    - name: Warn that server is online
-      ansible.builtin.debug:
-        msg: "Server is pingable. Server will not be installed unless it is not pingable or reinstall=true"
-      when: not results.failed
-
-    - name: Install OS
+    - name: Extract update level info from option properties
+      set_fact:
+        update_level_info: "{{ item.value }}"
+      loop: "{{ gather_host_facts_result.ansible_facts.config.option }}"
       when:
-        - blnreinstall or results.failed  # Verify host is offline or override is supplied.
-        - iso_image is defined
-        - auto_installer_address is defined
-        - management_network.netmask is defined
-        - management_network.gateway is defined
-        - installmethod is defined
-        - macaddr is defined or oobm_ip is defined
-      block:
+        - item.key == 'Misc.HostAgentUpdateLevel'
 
-        - name: Format static routes for API
-          ansible.builtin.set_fact:
-            api_routes: "{{ (api_routes | default([])) +
-              [{'subnet_ip': (item.subnet | ansible.netcommon.ipaddr('network')),
-              'cidr': (item.subnet | ansible.netcommon.ipaddr('prefix')),
-              'gateway': item.gateway}] }}"
-          loop: '{{ static_routes }}'
-          when: static_routes is defined
-
-        - name: Format hosts entry for API
-          ansible.builtin.set_fact:
-            hosts:
-              - hostname: "ESX{{ '%02d' | format((inventory_hostname[-2:] | int) - 0) }}"  # Uses the last 2 digits of the IP address in the server hostname.
-                host_ip: "{{ inventory_hostname }}"
-                macaddr: "{{ macaddr | default(omit) }}"
-                cimc_ip: "{{ oobm_ip | default(omit) }}"
-
-        - name: Create API Request Body
-          ansible.builtin.set_fact:
-            apibody:
-              iso_image: "{{ iso_image }}"
-              root_pwd: "{{  esxi_pwd }}"
-              vlan: "{{ management_network.vlan | default(0) }}"
-              vmnic: "{{ management_network.vmnic | default(0) }}"
-              firstdisk: "{{ firstdisk | default('firstdiskfound') }}"
-              firstdisktype: "{{ firstdisktype | default('local') }}"
-              # "diskpath": "naa.6d09466044143600247aee55ca2a6405"
-              enablessh: "{{ enablessh | default('true') }}"
-              clearpart: "{{ clearpart | default('false') }}"
-              installmethod: "{{ installmethod }}"
-              cimc_usr: "{{ oobm_usr | default(omit) }}"
-              cimc_pwd: "{{ oobm_pwd | default(omit) }}"
-              static_routes: "{{ api_routes | default(omit) }}"
-              host_netmask: "{{ management_network.netmask }}"
-              host_gateway: "{{ management_network.gateway }}"
-              # dns1": "192.168.0.10"
-              # dns2": "192.168.0.11"
-              hosts: "{{ hosts }}"
-
-        - name: Print final API Request Body
-          ansible.builtin.debug:
-            var: apibody
-
-        - name: Request ESXi Installation
-          delegate_to: "{{ delegate }}"
-          ansible.builtin.uri:
-            url: http://{{ auto_installer_address }}/api/v1/jobs
-            method: POST
-            body_format: json
-            body: "{{ apibody }}"
-          register: apiresponse
-          changed_when: true
-
-        - name: Print API Response
-          ansible.builtin.debug:
-            var: apiresponse
-
-        - name: Sleep for 10 seconds  # This allows us to catch immedient failures, if any, without waiting the full 3 minute.
-          wait_for:
-            timeout: 10
-          delegate_to: localhost
-
-        - name: Waiting for Installation to Complete
-          delegate_to: "{{ delegate }}"
-          ansible.builtin.uri:
-            url: http://{{ auto_installer_address }}/api/v1/jobs/{{ apiresponse.json[0] }}
-            method: GET
-          until: "'Finished' in apiresponse.json.status or 'Error' in apiresponse.json.status"
-          register: apiresponse
-          changed_when: false
-          failed_when: "'Finished' not in apiresponse.json.status"
-          retries: 20  # 20 * 180seconds = 1 hour
-          delay: 180  # Every 3 minutes
-          when: '"msg" not in apiresponse'  # Make sure the task skips when in check mode.
-
-        - name: Print Job Finished/Failed Response
-          ansible.builtin.debug:
-            var: apiresponse
+    - name: The output of Product, Version, Build, Update info for ESXi
+      debug:
+        msg:
+          - "Product : {{ gather_host_facts_result.ansible_facts.config.product.name }}"
+          - "Version : {{ gather_host_facts_result.ansible_facts.config.product.version }}"
+          - "Build   : {{ gather_host_facts_result.ansible_facts.config.product.build }}"
+          - "Update  : {{ update_level_info }}"
