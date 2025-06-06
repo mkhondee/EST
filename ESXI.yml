@@ -1,5 +1,6 @@
 ---
 - host: all
+- tasks :
 - name: Gather vmware host facts
   community.vmware.vmware_host_facts:
     hostname: "{{ esxi_server }}"
